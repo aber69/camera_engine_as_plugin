@@ -1,10 +1,13 @@
-import gi
-gi.require_version("Gst", "1.0")
-from gi.repository import Gst, GLib
+#!/usr/bin/env python3
 
-from threading import Thread
+import sys
 import time
 import os
+
+import gi
+gi.require_version('Gst', '1.0')
+gi.require_version('GLib', '2.0')
+from gi.repository import GLib,  Gst
 
 class InputSelectorProbeData:
     def __init__(self, pipeline, input_selector, num_input_sources, pad_start_idx=0):
@@ -13,6 +16,7 @@ class InputSelectorProbeData:
 
         self.current_pad_idx = pad_start_idx
         self.num_inputs = num_input_sources
+        print("Num of num_inputs", num_input_sources)
 
     def update_stream(self):
         next_pad_idx = (self.current_pad_idx + 1) % self.num_inputs
@@ -28,66 +32,81 @@ def change_active_source_callback(probe_data: InputSelectorProbeData):
 def bus_call(bus, message, loop):
     t = message.type
     if t == Gst.MessageType.EOS:
-        print("Caught End-of-Stream")
+        sys.stderr.write("Caught End-of-Stream")
         loop.quit()
     elif t == Gst.MessageType.WARNING:
         err, debug = message.parse_warnings()
-        print(err)
-        print(debug)
+        sys.stderr.write("Warning: %s: %s\n" % (err, debug))
     elif t == Gst.MessageType.ERROR:
         err, debug = message.parse_error()
-        print(err)
-        print(debug)
+        sys.stderr.write("Error: %s: %s\n" % (err, debug))
         loop.quit()
     else:
-        print("Some Other Element Info")
+        print("Some Other Element Info:\t", t)
     return True
 
 
-def main():
-    Gst.init("test-input-selector")
-    pipeline = Gst.Pipeline()
-    pipeline.set_name("test-input-selector")
+def Gst_ElementFactory_make_with_test(factory_name, name):
+    element = Gst.ElementFactory.make(factory_name, name)
+    if element is None:
+        sys.stderr.write("Gst.ElementFactory.make failed for: " +
+                        f"{factory_name} as {name}\n")
+        assert False
+    return element
 
-    input_selector = Gst.ElementFactory.make("input-selector", "test-input-selector")
+def add_usb_source_for_selection(pipeline, input_selector, ind, video_device_idx):
+    source = Gst_ElementFactory_make_with_test("v4l2src", f"source-video-{ind}")
+
+    buffer_1 = Gst_ElementFactory_make_with_test("queue", f"queue-1-{ind}")
+
+    capsfilter = Gst_ElementFactory_make_with_test(
+        "capsfilter", f"source-{ind}-capsfilter")
+
+    jpeg_parser = Gst_ElementFactory_make_with_test("jpegparse", f"jpeg-parser-{ind}")
+
+    buffer_2 = Gst_ElementFactory_make_with_test("queue", f"queue-2-{ind}")
+
+    jpeg_decoder = Gst_ElementFactory_make_with_test("jpegdec", f"jpeg-decode-{ind}")
+
+    source.set_property("device", f"/dev/video{video_device_idx}")
+    capsfilter.set_property("caps", Gst.Caps.from_string(
+        "image/jpeg, width=640, height=480, format=MJPG, framerate=30/1"))
+
+    pipeline.add(source)
+    pipeline.add(buffer_1)
+    pipeline.add(capsfilter)
+    pipeline.add(jpeg_parser)
+    pipeline.add(buffer_2)
+    pipeline.add(jpeg_decoder)
+
+    source.link(buffer_1)
+    buffer_1.link(capsfilter)
+    capsfilter.link(jpeg_parser)
+    jpeg_parser.link(buffer_2)
+    buffer_2.link(jpeg_decoder)
+
+    decoder_src_pad = jpeg_decoder.get_static_pad("src")
+    selector_sink_pad = Gst.Element.request_pad_simple(
+        input_selector, f"sink_{ind}")
+    decoder_src_pad.link(selector_sink_pad)
+    return pipeline
+
+def main():
+    # init GStreamer
+    Gst.init(None)
+    pipeline = Gst.Pipeline()
+    pipeline.set_name("camera_engine_with_external_camera_selector")
+
+    input_selector = Gst_ElementFactory_make_with_test("input-selector", "camera-input-selector")
     pipeline.add(input_selector)
 
-    print("Running Input Selector Test")
-    for i, video_device_idx in enumerate([2, 4]):
-        source = Gst.ElementFactory.make("v4l2src", f"source-video-{i}")
-
-        buffer_1 = Gst.ElementFactory.make("queue", f"queue-1-{i}")
-
-        capsfilter = Gst.ElementFactory.make("capsfilter", f"source-{i}-capsfilter")
-
-        jpeg_parser = Gst.ElementFactory.make("jpegparse", f"jpeg-parser-{i}")
-
-        buffer_2 = Gst.ElementFactory.make("queue", f"queue-2-{i}")
-
-        jpeg_decoder = Gst.ElementFactory.make("jpegdec", f"jpeg-decode-{i}")
+    print("Init Input Selector Test")
+    for src_i, video_device_idx in enumerate([0, 0, 0, 0, 0]):
+        pipeline = add_usb_source_for_selection(
+            pipeline, input_selector, src_i, video_device_idx)
 
 
-        source.set_property("device", f"/dev/video{video_device_idx}")
-        capsfilter.set_property("caps", Gst.Caps.from_string("image/jpeg, width=1280, height=720, format=MJPG, framerate=30/1"))
-
-        pipeline.add(source)
-        pipeline.add(buffer_1)
-        pipeline.add(capsfilter)
-        pipeline.add(jpeg_parser)
-        pipeline.add(buffer_2)
-        pipeline.add(jpeg_decoder)
-
-        source.link(buffer_1)
-        buffer_1.link(capsfilter)
-        capsfilter.link(jpeg_parser)
-        jpeg_parser.link(buffer_2)
-        buffer_2.link(jpeg_decoder)
-
-        decoder_src_pad = jpeg_decoder.get_static_pad("src")
-        selector_sink_pad = Gst.Element.request_pad_simple(input_selector, f"sink_{i}")
-        decoder_src_pad.link(selector_sink_pad)
-
-    display_sink = Gst.ElementFactory.make("ximagesink", f"display-sink-{i}")
+    display_sink = Gst_ElementFactory_make_with_test("ximagesink", f"display-sink")
     pipeline.add(display_sink)
     display_sink.set_property("sync", False)
     input_selector.link(display_sink)
@@ -97,9 +116,11 @@ def main():
     bus.add_signal_watch()
     bus.connect("message", bus_call, loop)
 
-    # Initalise the stream-selector logic objects
-    probe_data = InputSelectorProbeData(pipeline, input_selector, 2, 0)
+    # Initialise the stream-selector logic objects
+    probe_data = InputSelectorProbeData(pipeline, input_selector, src_i+1, 0)
     GLib.timeout_add(1000, change_active_source_callback, probe_data)
+
+    # start play back and listen to events
     pipeline.set_state(Gst.State.PLAYING)
     try:
         loop.run()
@@ -109,10 +130,8 @@ def main():
         print("We are done...")
         print(e)
 
+    # cleanup
     pipeline.set_state(Gst.State.NULL)
-
-
-
 
 if __name__ == "__main__":
     main()
