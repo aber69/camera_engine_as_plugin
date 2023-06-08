@@ -3,6 +3,7 @@
 import sys
 import time
 import os
+import random
 
 import gi
 gi.require_version('Gst', '1.0')
@@ -91,6 +92,63 @@ def add_usb_source_for_selection(pipeline, input_selector, ind, video_device_idx
     decoder_src_pad.link(selector_sink_pad)
     return pipeline
 
+
+def add_video_test_source(pipeline, input_selector, ind):
+    # gst-launch-1.0 -v videotestsrc pattern=snow ! video/x-raw,width=1280,height=720 ! autovideosink
+    source = Gst_ElementFactory_make_with_test("videotestsrc", f"source-video-{ind}")
+    buffer_1 = Gst_ElementFactory_make_with_test("queue", f"queue-1-{ind}")
+
+    capsfilter = Gst_ElementFactory_make_with_test(
+        "capsfilter", f"source-{ind}-capsfilter")
+
+    source_pattern = [
+        "smpte",   # SMPTE 100% color bars
+        "snow",    # Random (television snow)
+        "black",   # 100% Black
+        "white",   # 100% White
+        "red",     # Red
+        "green",   # Green
+        "blue",    # Blue
+        "checkers-1",    # Checkers 1px
+        "checkers-2",    # Checkers 2px
+        "checkers-4",    # Checkers 4px
+        "checkers-8",    # Checkers 8px
+        "circular",   # Circular
+        "blink",      # Blink
+        "smpte75",    # SMPTE 75% color bars
+        "zone-plate", # Zone plate
+        "gamut",      # Gamut checkers
+        "chroma-zone-plate",  # Chroma zone plate
+        "solid-color",    # Solid color
+        "ball",       # Moving ball
+        "smpte100",   # SMPTE 100% color bars
+        "bar",        # Bar
+        "pinwheel",   # Pinwheel
+        "spokes",     # Spokes
+        "gradient",   # Gradient
+        "colors",     # Colors
+        "smpte-rp-219",    # SMPTE test pattern, RP 219 conformant
+    ]
+
+    source.set_property(
+        "pattern", f"{source_pattern[random.randint(0, len(source_pattern))]}")
+    capsfilter.set_property("caps", Gst.Caps.from_string(
+        "video/x-raw, width=1280, height=720 framerate=30/1"))
+
+    pipeline.add(source)
+    pipeline.add(buffer_1)
+    pipeline.add(capsfilter)
+
+    source.link(buffer_1)
+    buffer_1.link(capsfilter)
+    #capsfilter.link(jpeg_parser)
+
+    capsfilter_src_pad = capsfilter.get_static_pad("src")
+    selector_sink_pad = Gst.Element.request_pad_simple(
+        input_selector, f"sink_{ind}")
+    capsfilter_src_pad.link(selector_sink_pad)
+    return pipeline
+
 def main():
     # init GStreamer
     Gst.init(None)
@@ -101,12 +159,14 @@ def main():
     pipeline.add(input_selector)
 
     print("Init Input Selector Test")
-    for src_i, video_device_idx in enumerate([0, 0, 0, 0, 0]):
-        pipeline = add_usb_source_for_selection(
-            pipeline, input_selector, src_i, video_device_idx)
+    #for src_i, video_device_idx in enumerate([0, 0, 0, 0, 0]):
+    #    pipeline = add_usb_source_for_selection(
+    #        pipeline, input_selector, src_i, video_device_idx)
 
+    for src_i in range(5):
+        pipeline = add_video_test_source(pipeline, input_selector, src_i)
 
-    display_sink = Gst_ElementFactory_make_with_test("ximagesink", f"display-sink")
+    display_sink = Gst_ElementFactory_make_with_test("autovideosink", f"display-sink")
     pipeline.add(display_sink)
     display_sink.set_property("sync", False)
     input_selector.link(display_sink)
