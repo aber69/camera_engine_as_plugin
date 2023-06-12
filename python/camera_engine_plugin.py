@@ -42,14 +42,25 @@ class CameraEngine(GstBase.BaseTransform):
             10,
             0,
             GObject.ParamFlags.READWRITE
-            )
-        # "pan" : (
-        #     (int, int),
-        #     "pan value",
-        #     "pan value to process",
-        #     (0,0),
-        #     GObject.ParamFlags.READWRITE
-        # )
+            ),
+        "pan-x": (
+            int,
+            "Pan X Enum",
+            "Pan X Value To Set",
+            -10,
+            10,
+            0,
+            GObject.ParamFlags.READWRITE
+        ),
+        "pan-y": (
+            int,
+            "Pan Y Enum",
+            "Pan Y Value To Set",
+            -10,
+            10,
+            0,
+            GObject.ParamFlags.READWRITE
+        )
     }
 
     # https://lazka.github.io/pgi-docs/GstBase-1.0/classes/BaseTransform.html
@@ -62,6 +73,8 @@ class CameraEngine(GstBase.BaseTransform):
         assert Path(self.config_file_name).exists()
 
         self.zoom = 0
+        self.pan_x_set = 0
+        self.pan_y_set = 0
 
 
     # GstBase.BaseTransform.reconfigure_src  -
@@ -76,6 +89,8 @@ class CameraEngine(GstBase.BaseTransform):
     def do_get_property(self, prop):
         if prop.name == "config_file_name":
             return self.config_file_name
+        elif prop.name == 'zoom':
+            return self.zoom
         else:
             raise AttributeError('unknown property %s' % prop.name)
 
@@ -85,6 +100,10 @@ class CameraEngine(GstBase.BaseTransform):
             assert Path(self.config_file_name).exists()
         elif prop.name == 'zoom':
             self.zoom = value
+        elif prop.name == 'pan-x':
+            self.pan_x_set = value
+        elif prop.name == 'pan-y':
+            self.pan_y_set = value
         else:
             raise AttributeError('unknown property %s' % prop.name)
 

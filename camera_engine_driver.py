@@ -194,7 +194,8 @@ def main():
     camera_engine.set_property("config-file-name", "./camera_engine.json")
     camera_engine.set_property("zoom", 1)
     camera_engine.set_property("zoom", -11)
-    camera_engine.set_property("pan", (1,1))
+    camera_engine.set_property("pan-x", 0)
+    camera_engine.set_property("pan-y", 0)
     input_selector.link(camera_engine)
     camera_engine.link(display_sink)
 
