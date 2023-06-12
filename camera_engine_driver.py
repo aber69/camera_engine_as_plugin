@@ -183,7 +183,7 @@ def main():
     #    pipeline = add_usb_source_for_selection(
     #        pipeline, input_selector, src_i, video_device_idx)
 
-    for src_i in range(5):
+    for src_i in range(4):
         pipeline = add_video_test_source(pipeline, input_selector, src_i)
 
     camera_engine = Gst_ElementFactory_make_with_test("camera_engine_py", f"camera_engine")
@@ -191,6 +191,10 @@ def main():
     pipeline.add(camera_engine)
     pipeline.add(display_sink)
     display_sink.set_property("sync", False)
+    camera_engine.set_property("config-file-name", "./camera_engine.json")
+    camera_engine.set_property("zoom", 1)
+    camera_engine.set_property("zoom", -11)
+    camera_engine.set_property("pan", (1,1))
     input_selector.link(camera_engine)
     camera_engine.link(display_sink)
 
