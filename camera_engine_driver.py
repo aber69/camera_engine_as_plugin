@@ -5,10 +5,28 @@ import time
 import os
 import random
 
+try:
+    import pydantic
+except ModuleNotFoundError:
+    import subprocess
+    subprocess.check_call([sys.executable, "-m", "pip", "install", 'pydantic'])
+
+# https://gist.github.com/hum4n0id/cda96fb07a34300cdb2c0e314c14df0a
+
+#%% Setup path to python plugins
+assert os.path.exists(os.path.dirname(__file__) + '/python')
+
+os.environ['GST_PLUGIN_PATH'] = str(os.environ['GST_PLUGIN_PATH']+":" if 'GST_PLUGIN_PATH' in os.environ else "") + \
+    os.path.dirname(__file__)
+os.environ['GST_PLUGIN_PATH'] = ":".join(set(os.environ['GST_PLUGIN_PATH'].split(':')))
+# print(os.environ['GST_PLUGIN_PATH'])
+
+#%%
 import gi
 gi.require_version('Gst', '1.0')
 gi.require_version('GLib', '2.0')
 from gi.repository import GLib,  Gst
+
 
 class InputSelectorProbeData:
     def __init__(self, pipeline, input_selector, num_input_sources, pad_start_idx=0):
@@ -42,8 +60,8 @@ def bus_call(bus, message, loop):
         err, debug = message.parse_error()
         sys.stderr.write("Error: %s: %s\n" % (err, debug))
         loop.quit()
-    else:
-        print("Some Other Element Info:\t", t)
+    #else:
+    #    print("Some Other Element Info:\t", t)
     return True
 
 
@@ -71,7 +89,7 @@ def add_usb_source_for_selection(pipeline, input_selector, ind, video_device_idx
 
     source.set_property("device", f"/dev/video{video_device_idx}")
     capsfilter.set_property("caps", Gst.Caps.from_string(
-        "image/jpeg, width=640, height=480, format=MJPG, framerate=30/1"))
+        "video/x-raw, width=640, height=480, framerate=30/1"))
 
     pipeline.add(source)
     pipeline.add(buffer_1)
@@ -96,7 +114,7 @@ def add_usb_source_for_selection(pipeline, input_selector, ind, video_device_idx
 def add_video_test_source(pipeline, input_selector, ind):
     # gst-launch-1.0 -v videotestsrc pattern=snow ! video/x-raw,width=1280,height=720 ! autovideosink
     source = Gst_ElementFactory_make_with_test("videotestsrc", f"source-video-{ind}")
-    buffer_1 = Gst_ElementFactory_make_with_test("queue", f"queue-1-{ind}")
+    # buffer_1 = Gst_ElementFactory_make_with_test("queue", f"queue-1-{ind}")
 
     capsfilter = Gst_ElementFactory_make_with_test(
         "capsfilter", f"source-{ind}-capsfilter")
@@ -131,16 +149,18 @@ def add_video_test_source(pipeline, input_selector, ind):
     ]
 
     source.set_property(
-        "pattern", f"{source_pattern[random.randint(0, len(source_pattern))]}")
+        "pattern", f"{source_pattern[random.randint(0, len(source_pattern)-1)]}")
+    # https://brettviren.github.io/pygst-tutorial-org/pygst-tutorial.html
     capsfilter.set_property("caps", Gst.Caps.from_string(
-        "video/x-raw, width=1280, height=720 framerate=30/1"))
+        "video/x-raw, width=1280, height=720"))
+
 
     pipeline.add(source)
-    pipeline.add(buffer_1)
+    # pipeline.add(buffer_1)
     pipeline.add(capsfilter)
 
-    source.link(buffer_1)
-    buffer_1.link(capsfilter)
+    source.link(capsfilter)
+    # buffer_1.link(capsfilter)
     #capsfilter.link(jpeg_parser)
 
     capsfilter_src_pad = capsfilter.get_static_pad("src")
@@ -166,10 +186,13 @@ def main():
     for src_i in range(5):
         pipeline = add_video_test_source(pipeline, input_selector, src_i)
 
+    camera_engine = Gst_ElementFactory_make_with_test("camera_engine_py", f"camera_engine")
     display_sink = Gst_ElementFactory_make_with_test("autovideosink", f"display-sink")
+    pipeline.add(camera_engine)
     pipeline.add(display_sink)
     display_sink.set_property("sync", False)
-    input_selector.link(display_sink)
+    input_selector.link(camera_engine)
+    camera_engine.link(display_sink)
 
     loop = GLib.MainLoop()
     bus = pipeline.get_bus()
