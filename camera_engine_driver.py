@@ -108,10 +108,10 @@ def add_usb_source_for_selection(pipeline, input_selector, ind, video_device_idx
     selector_sink_pad = Gst.Element.request_pad_simple(
         input_selector, f"sink_{ind}")
     decoder_src_pad.link(selector_sink_pad)
-    return pipeline
+    return pipeline, ind
 
 
-def add_video_test_source(pipeline, input_selector, ind):
+def add_video_test_source(pipeline, input_selector, ind, resolution=(1280, 720), rotate=False):
     # gst-launch-1.0 -v videotestsrc pattern=snow ! video/x-raw,width=1280,height=720 ! autovideosink
     source = Gst_ElementFactory_make_with_test("videotestsrc", f"source-video-{ind}")
     # buffer_1 = Gst_ElementFactory_make_with_test("queue", f"queue-1-{ind}")
@@ -148,11 +148,12 @@ def add_video_test_source(pipeline, input_selector, ind):
         "smpte-rp-219",    # SMPTE test pattern, RP 219 conformant
     ]
 
-    source.set_property(
-        "pattern", f"{source_pattern[random.randint(0, len(source_pattern)-1)]}")
+    pattern=f"{source_pattern[random.randint(0, len(source_pattern)-1)]}"
+    print(f"Test pattern [{pattern}] for #{ind} - {resolution}")
+    source.set_property("pattern", pattern)
     # https://brettviren.github.io/pygst-tutorial-org/pygst-tutorial.html
     capsfilter.set_property("caps", Gst.Caps.from_string(
-        "video/x-raw, width=1280, height=720"))
+        f"video/x-raw, width={resolution[0]}, height={resolution[1]}"))
 
 
     pipeline.add(source)
@@ -167,7 +168,7 @@ def add_video_test_source(pipeline, input_selector, ind):
     selector_sink_pad = Gst.Element.request_pad_simple(
         input_selector, f"sink_{ind}")
     capsfilter_src_pad.link(selector_sink_pad)
-    return pipeline
+    return pipeline, ind
 
 def main():
     # init GStreamer
@@ -179,19 +180,24 @@ def main():
     pipeline.add(input_selector)
 
     print("Init Input Selector Test")
-    #for src_i, video_device_idx in enumerate([0, 0, 0, 0, 0]):
-    #    pipeline = add_usb_source_for_selection(
-    #        pipeline, input_selector, src_i, video_device_idx)
 
-    for src_i in range(4):
-        pipeline = add_video_test_source(pipeline, input_selector, src_i)
+    src_i=0
+    #    pipeline, src_i = add_usb_source_for_selection(
+    #        pipeline, input_selector, src_i+1, video_device_idx)
+
+    pipeline, src_i = add_video_test_source(pipeline, input_selector, src_i+1, (1280, 720))
+    pipeline, src_i = add_video_test_source(pipeline, input_selector, src_i+1, (1280, 720))
+    pipeline, src_i = add_video_test_source(pipeline, input_selector, src_i+1, (1280, 720))
+    pipeline, src_i = add_video_test_source(pipeline, input_selector, src_i+1, (1280, 720))
+    pipeline, src_i = add_video_test_source(pipeline, input_selector, src_i+1, (1280, 720))
 
     camera_engine = Gst_ElementFactory_make_with_test("camera_engine_py", f"camera_engine")
     display_sink = Gst_ElementFactory_make_with_test("autovideosink", f"display-sink")
     pipeline.add(camera_engine)
     pipeline.add(display_sink)
     display_sink.set_property("sync", False)
-    camera_engine.set_property("config-file-name", "./camera_engine.json")
+    camera_engine.set_property("config-file-name",
+                               os.path.dirname(__file__) + "/camera_engine.json")
     camera_engine.set_property("zoom", 1)
     camera_engine.set_property("zoom", -11)
     camera_engine.set_property("pan-x", 0)
@@ -205,7 +211,7 @@ def main():
     bus.connect("message", bus_call, loop)
 
     # Initialise the stream-selector logic objects
-    probe_data = InputSelectorProbeData(pipeline, input_selector, src_i+1, 0)
+    probe_data = InputSelectorProbeData(pipeline, input_selector, src_i, 0)
     GLib.timeout_add(1000, change_active_source_callback, probe_data)
 
     # start play back and listen to events
