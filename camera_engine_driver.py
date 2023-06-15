@@ -111,13 +111,17 @@ def add_usb_source_for_selection(pipeline, input_selector, ind, video_device_idx
     return pipeline, ind
 
 
-def add_video_test_source(pipeline, input_selector, ind, resolution=(1280, 720), rotate=False):
+def add_video_test_source(pipeline, input_selector, ind, resolution=(1280, 720),
+                          video_direction=0):
     # gst-launch-1.0 -v videotestsrc pattern=snow ! video/x-raw,width=1280,height=720 ! autovideosink
     source = Gst_ElementFactory_make_with_test("videotestsrc", f"source-video-{ind}")
     # buffer_1 = Gst_ElementFactory_make_with_test("queue", f"queue-1-{ind}")
 
     capsfilter = Gst_ElementFactory_make_with_test(
         "capsfilter", f"source-{ind}-capsfilter")
+
+    videoflip = Gst_ElementFactory_make_with_test(
+        "videoflip", f"videoflip-{ind}")
 
     source_pattern = [
         "smpte",   # SMPTE 100% color bars
@@ -155,19 +159,18 @@ def add_video_test_source(pipeline, input_selector, ind, resolution=(1280, 720),
     capsfilter.set_property("caps", Gst.Caps.from_string(
         f"video/x-raw, width={resolution[0]}, height={resolution[1]}"))
 
-
+    videoflip.set_property("video-direction", video_direction)
     pipeline.add(source)
-    # pipeline.add(buffer_1)
     pipeline.add(capsfilter)
+    pipeline.add(videoflip)
 
     source.link(capsfilter)
-    # buffer_1.link(capsfilter)
-    #capsfilter.link(jpeg_parser)
+    capsfilter.link(videoflip)
 
-    capsfilter_src_pad = capsfilter.get_static_pad("src")
+    videoflip_src_pad = videoflip.get_static_pad("src")
     selector_sink_pad = Gst.Element.request_pad_simple(
         input_selector, f"sink_{ind}")
-    capsfilter_src_pad.link(selector_sink_pad)
+    videoflip_src_pad.link(selector_sink_pad)
     return pipeline, ind
 
 def main():
@@ -185,11 +188,11 @@ def main():
     #    pipeline, src_i = add_usb_source_for_selection(
     #        pipeline, input_selector, src_i+1, video_device_idx)
 
-    pipeline, src_i = add_video_test_source(pipeline, input_selector, src_i+1, (1280, 720))
-    pipeline, src_i = add_video_test_source(pipeline, input_selector, src_i+1, (1280, 720))
-    pipeline, src_i = add_video_test_source(pipeline, input_selector, src_i+1, (1280, 720))
-    pipeline, src_i = add_video_test_source(pipeline, input_selector, src_i+1, (1280, 720))
-    pipeline, src_i = add_video_test_source(pipeline, input_selector, src_i+1, (1280, 720))
+    pipeline, src_i = add_video_test_source(pipeline, input_selector, src_i+1, (1280, 720), 1)
+    pipeline, src_i = add_video_test_source(pipeline, input_selector, src_i+1, (1600, 1200), 2)
+    pipeline, src_i = add_video_test_source(pipeline, input_selector, src_i+1, (1280, 720), 3)
+    pipeline, src_i = add_video_test_source(pipeline, input_selector, src_i+1, (1600, 1200), 0)
+    pipeline, src_i = add_video_test_source(pipeline, input_selector, src_i+1, (1280, 720), 4)
 
     camera_engine = Gst_ElementFactory_make_with_test("camera_engine_py", f"camera_engine")
     display_sink = Gst_ElementFactory_make_with_test("autovideosink", f"display-sink")
