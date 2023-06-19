@@ -12,6 +12,18 @@ Gst.init(None)
 from fov_management import FovManager, Point2D
 
 class CameraEngine(GstBase.BaseTransform):
+    # In Caps
+    IN_CAPS = Gst.Caps(Gst.Structure('video/x-raw',
+                                 format=Gst.ValueList(["RGB", "GRAY8"]),
+                                 width=Gst.ValueList([320, 640, 1280, 1920]),
+                                 height=Gst.ValueList([240, 480, 720, 1080])))
+
+    # Output caps
+    OUT_CAPS = Gst.Caps(Gst.Structure('video/x-raw',
+                                    format=Gst.ValueList(["RGB"]),
+                                    width=Gst.ValueList([640, 1280, 1920]),
+                                    height=Gst.ValueList([480, 720, 1080])))
+
     # The contents of this tuple will be used to call gst_element_class_set_metadata
     # Gst.Element.get_metadata is python wrapper for 'gst_element_get_metadata'
     __gstmetadata__ = ('Camera Engine', 'Transform', \
@@ -75,6 +87,9 @@ class CameraEngine(GstBase.BaseTransform):
         self.zoom = 0
         self.pan_x_set = 0
         self.pan_y_set = 0
+
+        print(self.IN_CAPS.to_string())
+        print(self.OUT_CAPS.to_string())
 
 
     # GstBase.BaseTransform.reconfigure_src  -
